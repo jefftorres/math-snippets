@@ -3,4 +3,5 @@ project(math_snippets C)
 
 set(CMAKE_C_STANDARD 11)
 
-add_executable(math_snippets monte_carlo.c)
+add_executable(monte_carlo monte_carlo.c)
+add_executable(conway conway.c)
