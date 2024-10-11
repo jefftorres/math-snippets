@@ -3,6 +3,10 @@
 #include <stdlib.h>
 #include <windows.h>
 #include <SDL.h>
+#include <SDL_image.h>
+
+#define SCREEN_WIDTH 1280
+#define SCREEN_HEIGHT 960
 
 // Preset initial states
 enum Shape {
@@ -12,49 +16,71 @@ enum Shape {
     Toad
 };
 
-void print_board(int const *, int);
-int adj_states(int const *, int, int, int);
 int *get_board(int);
-int *update_board(int const *, int);
+void print_board(int const *, int);
 void fill_board(int *, int, enum Shape);
 
+int adj_states(int const *, int, int, int);
+int *update_board(int const *, int);
+
+
 bool init();
-void kill();
 bool load();
+SDL_Texture *load_texture(char const *path);
 bool loop();
+void kill();
 
 // Pointers to window and surface
-SDL_Surface *winSurface = NULL;
-SDL_Window *window = NULL;
+SDL_Surface *g_surface = NULL;
+SDL_Surface *mandelbrot = NULL;
+SDL_Window *g_window = NULL;
+SDL_Renderer *g_renderer = NULL;
+SDL_Texture *g_texture = NULL;
 
 int main(int argc, char** argv) {
+    // Working code for console ver. of Conway
     // const size_t size = 10;
     // int *board = get_board(size);
     //
     // if (board) {
     //     fill_board(board, size, 0);
     //     print_board(board, size);
-
-    if (!init()) return 1;
-    if (!load()) return 1;
-
-    while(loop()) {
-        SDL_Delay(10);
-    }
-
-    kill();
-
+    //
     // for (int a = 0; a < 1000; a++) {
     //     Sleep(250);
     //     board = update_board(board, size);
     //     system("cls");
     //     print_board(board, size);
     // }
-
+    //
     //     free(board);
     // } else {
     //     fprintf(stderr, "%s", "Error during memory allocation.\n");
     // }
+
+    // SDL Init
+    if (!init()) return 1;
+    if (!load()) return 1;
+
+    // SDL_Rect viewport = {0, 0, 640/2, 480/2};
+    // SDL_RenderSetViewport(g_renderer, &viewport);
+
+    // SDL_RenderCopy(g_renderer, mandelbrot, NULL, NULL);
+
+    // blits image when loaded as IMG
+    // SDL_BlitSurface(mandelbrot, NULL, g_surface, NULL);
+
+    while(loop()) {
+        SDL_Delay(10);
+
+        // Keep checking about render
+        // https://lazyfoo.net/tutorials/SDL/07_texture_loading_and_rendering/index.php
+        SDL_RenderClear(g_renderer);
+        SDL_RenderCopy(g_renderer, g_texture, NULL, NULL);
+        SDL_RenderPresent(g_renderer);
+    }
+
+    kill();
     return EXIT_SUCCESS;
 }
 
@@ -110,7 +136,6 @@ int adj_states(int const *board, int const x, int const y, int const size) {
     if (board[xl*size + yu]) alive++;
     if (board[xu*size + yl]) alive++;
     if (board[xu*size + yu]) alive++;
-    // printf("Alive adjacents for cell %d (%d, %d): %d.\n", x*size + y, x, y, alive);
 
     return alive;
 }
@@ -135,6 +160,77 @@ int *update_board(int const *board, int const size) {
     return next_board;
 }
 
+// Initialize SDL.
+bool init() {
+    if (SDL_Init(SDL_INIT_EVERYTHING) < 0) {
+
+        printf("Error initializing SDL: %s\n", SDL_GetError());
+        return false;
+    }
+
+    // Creates the window
+    g_window = SDL_CreateWindow("Conway", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+        SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
+    if (g_window == NULL) {
+        printf("Error creating window: %s", SDL_GetError());
+        return false;
+    }
+
+    // Getting the surface
+    g_surface = SDL_GetWindowSurface(g_window);
+    if (g_surface == NULL) {
+        printf("Error getting surface: %s", SDL_GetError());
+        return false;
+    }
+
+    return true;
+}
+
+// Loads assets
+bool load() {
+    g_renderer = SDL_CreateSoftwareRenderer(g_surface);
+    if (g_renderer == NULL) {
+        printf("Renderer could not be created! SDL error: %s", SDL_GetError());
+        return false;
+    }
+    SDL_SetRenderDrawColor(g_renderer, 0xff, 0xff, 0xff, 0xff);
+
+    // Load as texture
+    g_texture = load_texture("mandelbrot.jpg");
+    if (g_texture == NULL) {
+        printf("Failed to load texture image!\n");
+        return false;
+    }
+
+    // Load as IMG
+    // mandelbrot = IMG_Load("mandelbrot.jpg");
+    // if (mandelbrot == NULL) {
+    //     printf("Unable to load image %s, SDL error: %s\n", "mandelbrot.jpg", SDL_GetError());
+    //     return false;
+    // }
+
+    return true;
+}
+
+SDL_Texture *load_texture(char const *path) {
+    SDL_Texture *new_texture = NULL;
+    SDL_Surface *loaded_surface = IMG_Load(path);
+
+    if (loaded_surface == NULL) {
+        printf("Unable to load image %s, SDL error: %s\n", path, SDL_GetError());
+    } else {
+        new_texture = SDL_CreateTextureFromSurface(g_renderer, loaded_surface);
+        if (new_texture == NULL) {
+            printf("Unable to create texture from %s! SDL error: %s", path, SDL_GetError());
+        }
+
+        SDL_FreeSurface(loaded_surface);
+    }
+
+    return new_texture;
+}
+
+// TODO Need to check working keystrokes
 bool loop() {
     static bool square;
     SDL_Event e;
@@ -145,64 +241,40 @@ bool loop() {
                 return false;
             case SDL_KEYUP:
                 square = true;
+            break;
             case SDL_KEYDOWN:
                 square = false;
+            break;
             case SDL_MOUSEMOTION:
+                break;
+            default:
                 break;
         }
     }
 
     if (square) {
-        SDL_Rect sq;
-        sq.x = 160;
-        sq.y = 120;
-        sq.w = 320;
-        sq.h = 240;
-
+        // SDL_FillRect(g_surface, NULL, SDL_MapRGB(g_surface->format, 255, 255, 255));
     }
 
     // Update window
-    SDL_UpdateWindowSurface(window);
+    SDL_UpdateWindowSurface(g_window);
     return true;
 }
 
-bool load() {
-    SDL_FillRect(winSurface, NULL, SDL_MapRGB(winSurface->format, 255, 255, 255));
-    return true;
-}
-
-bool init() {
-    // Initialize SDL.
-    if (SDL_Init(SDL_INIT_EVERYTHING) < 0) {
-
-        printf("Error initializing SDL: %s\n", SDL_GetError());
-        system("pause");
-        return false;
-    }
-
-    // Creates the window
-    window = SDL_CreateWindow("Conway", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-        1280, 720, SDL_WINDOW_SHOWN);
-    if (!window) {
-        printf("Error creating window: %s", SDL_GetError());
-        system("pause");
-        return false;
-    }
-
-    // Getting the surface
-    winSurface = SDL_GetWindowSurface(window);
-    if (!winSurface) {
-        printf("Error getting surface: %s", SDL_GetError());
-        system("pause");
-        return false;
-    }
-
-    return true;
-}
-
+// Free loaded assets and quit SDL
 void kill() {
-    SDL_FreeSurface(winSurface);
+    SDL_FreeSurface(mandelbrot);
+    mandelbrot = NULL;
+    SDL_FreeSurface(g_surface);
+    g_surface = NULL;
 
-    SDL_DestroyWindow(window);
+    SDL_DestroyRenderer(g_renderer);
+    g_renderer = NULL;
+    SDL_DestroyTexture(g_texture);
+    g_texture = NULL;
+    SDL_DestroyWindow(g_window);
+    g_window = NULL;
+
+    IMG_Quit();
     SDL_Quit();
 }
