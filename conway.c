@@ -2,11 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <windows.h>
-
-void print_board(int const *, int);
-int adj_states(int const *, int, int, int);
-int *get_board(int);
-int *update_board(int *, int);
+#include <SDL.h>
 
 // Preset initial states
 enum Shape {
@@ -16,27 +12,49 @@ enum Shape {
     Toad
 };
 
+void print_board(int const *, int);
+int adj_states(int const *, int, int, int);
+int *get_board(int);
+int *update_board(int const *, int);
 void fill_board(int *, int, enum Shape);
 
-int main(void) {
-    const size_t size = 10;
-    int *board = get_board(size);
+bool init();
+void kill();
+bool load();
+bool loop();
 
-    if (board) {
-        fill_board(board, size, 1);
-        print_board(board, size);
+// Pointers to window and surface
+SDL_Surface *winSurface = NULL;
+SDL_Window *window = NULL;
 
-        for (int a = 0; a < 1000; a++) {
-            Sleep(200);
-            board = update_board(board, size);
-            system("cls");
-            print_board(board, size);
-        }
+int main(int argc, char** argv) {
+    // const size_t size = 10;
+    // int *board = get_board(size);
+    //
+    // if (board) {
+    //     fill_board(board, size, 0);
+    //     print_board(board, size);
 
-        free(board);
-    } else {
-        fprintf(stderr, "%s", "Error during memory allocation.\n");
+    if (!init()) return 1;
+    if (!load()) return 1;
+
+    while(loop()) {
+        SDL_Delay(10);
     }
+
+    kill();
+
+    // for (int a = 0; a < 1000; a++) {
+    //     Sleep(250);
+    //     board = update_board(board, size);
+    //     system("cls");
+    //     print_board(board, size);
+    // }
+
+    //     free(board);
+    // } else {
+    //     fprintf(stderr, "%s", "Error during memory allocation.\n");
+    // }
     return EXIT_SUCCESS;
 }
 
@@ -48,7 +66,7 @@ void print_board(int const *board, int const size) {
     // i -> cols, j-> rows
     for (int i = 0; i < size; i++) {
         for (int j = 0; j < size; j++) {
-            printf("%d  ", board[i*size + j]);
+            printf("%d ", board[i*size + j]);
         }
         printf("\n");
     }
@@ -98,7 +116,7 @@ int adj_states(int const *board, int const x, int const y, int const size) {
 }
 
 // Next board state
-int *update_board(int *board, int const size) {
+int *update_board(int const *board, int const size) {
     int *next_board = get_board(size);
 
     for (int i = 0; i < size; i++) {
@@ -113,6 +131,78 @@ int *update_board(int *board, int const size) {
         }
     }
 
-    free(board);
+    // free(board);
     return next_board;
+}
+
+bool loop() {
+    static bool square;
+    SDL_Event e;
+
+    while(SDL_PollEvent(&e) != 0) {
+        switch (e.type) {
+            case SDL_QUIT:
+                return false;
+            case SDL_KEYUP:
+                square = true;
+            case SDL_KEYDOWN:
+                square = false;
+            case SDL_MOUSEMOTION:
+                break;
+        }
+    }
+
+    if (square) {
+        SDL_Rect sq;
+        sq.x = 160;
+        sq.y = 120;
+        sq.w = 320;
+        sq.h = 240;
+
+    }
+
+    // Update window
+    SDL_UpdateWindowSurface(window);
+    return true;
+}
+
+bool load() {
+    SDL_FillRect(winSurface, NULL, SDL_MapRGB(winSurface->format, 255, 255, 255));
+    return true;
+}
+
+bool init() {
+    // Initialize SDL.
+    if (SDL_Init(SDL_INIT_EVERYTHING) < 0) {
+
+        printf("Error initializing SDL: %s\n", SDL_GetError());
+        system("pause");
+        return false;
+    }
+
+    // Creates the window
+    window = SDL_CreateWindow("Conway", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+        1280, 720, SDL_WINDOW_SHOWN);
+    if (!window) {
+        printf("Error creating window: %s", SDL_GetError());
+        system("pause");
+        return false;
+    }
+
+    // Getting the surface
+    winSurface = SDL_GetWindowSurface(window);
+    if (!winSurface) {
+        printf("Error getting surface: %s", SDL_GetError());
+        system("pause");
+        return false;
+    }
+
+    return true;
+}
+
+void kill() {
+    SDL_FreeSurface(winSurface);
+
+    SDL_DestroyWindow(window);
+    SDL_Quit();
 }
