@@ -1,32 +1,29 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <windows.h>
 #include <SDL.h>
 #include <SDL_image.h>
 
-#define SCREEN_WIDTH 1280
-#define SCREEN_HEIGHT 960
+#define SCREEN_WIDTH 1024
+#define SCREEN_HEIGHT 768
 
 // Preset initial states
-enum Shape {
+typedef enum {
     Blinker,
     Glider,
-    // TODO: toad
-    Toad
-};
+    Pentomino
+} Shape;
 
-int *get_board(int);
-void print_board(int const *, int);
-void fill_board(int *, int, enum Shape);
+int *get_board(size_t);
+void print_board(int const*, size_t);
+void fill_board(int*, size_t, Shape);
 
-int adj_states(int const *, int, int, int);
-int *update_board(int const *, int);
-
+int adj_states(int const*, int, int, size_t);
+int *update_board(int const*, size_t);
 
 bool init();
 bool load();
-SDL_Texture *load_texture(char const *path);
+SDL_Texture *load_texture(char const*);
 bool loop();
 void kill();
 
@@ -37,26 +34,14 @@ SDL_Window *g_window = NULL;
 SDL_Renderer *g_renderer = NULL;
 SDL_Texture *g_texture = NULL;
 
-int main(int argc, char** argv) {
-    // Working code for console ver. of Conway
-    // const size_t size = 10;
-    // int *board = get_board(size);
-    //
-    // if (board) {
-    //     fill_board(board, size, 0);
-    //     print_board(board, size);
-    //
-    // for (int a = 0; a < 1000; a++) {
-    //     Sleep(250);
-    //     board = update_board(board, size);
-    //     system("cls");
-    //     print_board(board, size);
-    // }
-    //
-    //     free(board);
-    // } else {
-    //     fprintf(stderr, "%s", "Error during memory allocation.\n");
-    // }
+int main(int argc, char **argv) {
+    size_t const size = 10;
+    int *board = get_board(size);
+
+    if (board) {
+        fill_board(board, size, 1);
+        //     print_board(board, size);
+    }
 
     // SDL Init
     if (!init()) return 1;
@@ -70,26 +55,63 @@ int main(int argc, char** argv) {
     // blits image when loaded as IMG
     // SDL_BlitSurface(mandelbrot, NULL, g_surface, NULL);
 
-    while(loop()) {
-        SDL_Delay(10);
+    // drawing grid
+    int const delta = SCREEN_HEIGHT/size * 0.95;
+    SDL_Rect grid;
+    grid.w = delta;
+    grid.h = delta;
+    int const dist = delta*size/2;
 
-        // Keep checking about render
-        // https://lazyfoo.net/tutorials/SDL/07_texture_loading_and_rendering/index.php
+    int const yl = SCREEN_HEIGHT/2 - dist;
+    int const yu = SCREEN_HEIGHT/2 + dist;
+    int const xl = SCREEN_WIDTH/2 - dist;
+    int const xu = SCREEN_WIDTH/2 + dist;
+
+    while(loop()) {
+        SDL_SetRenderDrawColor(g_renderer, 0x11, 0x11, 0x11, 0xff);
         SDL_RenderClear(g_renderer);
-        SDL_RenderCopy(g_renderer, g_texture, NULL, NULL);
+
+        // Draw blue horizontal line
+        // SDL_SetRenderDrawColor(g_renderer, 0x00, 0x00, 0xcc, 0xff);
+        // SDL_RenderDrawLine(g_renderer, 0, SCREEN_HEIGHT/2, SCREEN_WIDTH, SCREEN_HEIGHT/2);
+
+        // Renders the mandelbrot
+        // SDL_RenderCopy(g_renderer, g_texture, NULL, NULL);
+
+        int z1 = 0;
+        for (int dy=xl; dy<xu; dy+=delta) {
+            int z2 = 0;
+            grid.x = dy;
+
+            for (int dx=yl; dx<yu; dx+=delta) {
+                grid.y = dx;
+                if (board[z1*size + z2]) {
+                    // #2d8a91
+                    SDL_SetRenderDrawColor(g_renderer, 0x2d, 0x8a, 0x91, 0xff);
+                    SDL_RenderFillRect(g_renderer, &grid);
+                }
+                z2++;
+                // gray
+                SDL_SetRenderDrawColor(g_renderer, 0xdc, 0xdc, 0xdc, 0xff);
+                SDL_RenderDrawRect(g_renderer, &grid);
+            }
+            z1++;
+        }
         SDL_RenderPresent(g_renderer);
+        board = update_board(board, size);
+        SDL_Delay(80);
     }
 
+    free(board);
     kill();
     return EXIT_SUCCESS;
 }
 
-int *get_board(int const size) {
+int *get_board(size_t const size) {
     return calloc(size*size, sizeof(int));
 }
 
-void print_board(int const *board, int const size) {
-    // i -> cols, j-> rows
+void print_board(int const *board, size_t const size) {
     for (int i = 0; i < size; i++) {
         for (int j = 0; j < size; j++) {
             printf("%d ", board[i*size + j]);
@@ -98,19 +120,32 @@ void print_board(int const *board, int const size) {
     }
 }
 
-void fill_board(int *board, int const size, enum Shape const s) {
+void fill_board(int *board, size_t const size, Shape const s) {
+    int count = 0;
     switch (s) {
         // Generates a blinker
         case 0:
-            for (int i = size/2-1; i <= size/2+1; i++) {
+            for (int i=size/2-1; i <= size/2+1; i++) {
                 board[i*size + size/2] = true;
+                count++;
             }
+            break;
         // Generates a glider
         case 1:
-            for (int i = size/2-1; i <= size/2+1; i++) {
-                for (int j = size/2-1; j <= size/2+1; j++) {
+            for (int i=size/2-1; i <= size/2+1; i++) {
+                for (int j=size/2-1; j <= size/2+1; j++) {
                     if (j == size/2+1) board[i*size + j] = true;
-                    if (i == j+1) board[i*size + j] = true;
+                    if (i == j+1)      board[i*size + j] = true;
+                    count++;
+                }
+            }
+            break;
+        case 2:
+            for (int i = size/2-1; i <= size/2+1; i++) {
+                for (int j=size/2-1; j <= size/2+1; j++) {
+                    if (i == size/2)                    board[i*size + j] = true;
+                    if (i == size/2-1 && j == size/2)   board[i*size + j] = true;
+                    if (i == size/2+1 && j == size/2-1) board[i*size + j] = true;
                 }
             }
         default:
@@ -120,7 +155,7 @@ void fill_board(int *board, int const size, enum Shape const s) {
 }
 
 // Check for amount of alive cells adjacent to given (x,y) position
-int adj_states(int const *board, int const x, int const y, int const size) {
+int adj_states(int const *board, int const x, int const y, size_t const size) {
     int alive = 0;
 
     int const xl = x == 0 ? size-1 : x-1;
@@ -128,6 +163,7 @@ int adj_states(int const *board, int const x, int const y, int const size) {
     int const yl = y == 0 ? size-1 : y-1;
     int const yu = y == size-1 ? 0 : y+1;
 
+    // Any other way to do this?
     if (board[x*size + yl]) alive++;
     if (board[x*size + yu]) alive++;
     if (board[xl*size + y]) alive++;
@@ -141,11 +177,11 @@ int adj_states(int const *board, int const x, int const y, int const size) {
 }
 
 // Next board state
-int *update_board(int const *board, int const size) {
+int *update_board(int const *board, size_t const size) {
     int *next_board = get_board(size);
 
-    for (int i = 0; i < size; i++) {
-        for (int j = 0; j < size; j++) {
+    for (int i=0; i < size; i++) {
+        for (int j=0; j < size; j++) {
             int const adjs = adj_states(board, i, j, size);
 
             if (board[i*size + j]) {
@@ -156,20 +192,18 @@ int *update_board(int const *board, int const size) {
         }
     }
 
-    // free(board);
     return next_board;
 }
 
 // Initialize SDL.
 bool init() {
     if (SDL_Init(SDL_INIT_EVERYTHING) < 0) {
-
         printf("Error initializing SDL: %s\n", SDL_GetError());
         return false;
     }
 
     // Creates the window
-    g_window = SDL_CreateWindow("Conway", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+    g_window = SDL_CreateWindow("Conway", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_CENTERED,
         SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
     if (g_window == NULL) {
         printf("Error creating window: %s", SDL_GetError());
@@ -193,9 +227,8 @@ bool load() {
         printf("Renderer could not be created! SDL error: %s", SDL_GetError());
         return false;
     }
-    SDL_SetRenderDrawColor(g_renderer, 0xff, 0xff, 0xff, 0xff);
 
-    // Load as texture
+    // Load img as texture
     g_texture = load_texture("mandelbrot.jpg");
     if (g_texture == NULL) {
         printf("Failed to load texture image!\n");
