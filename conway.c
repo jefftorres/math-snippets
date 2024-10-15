@@ -15,91 +15,53 @@ typedef enum {
 } Shape;
 
 int *get_board(size_t);
-void print_board(int const*, size_t);
+void draw_board(int const*, SDL_Rect, int, size_t);
+SDL_Rect get_grid(size_t, int);
 void fill_board(int*, size_t, Shape);
-
 int adj_states(int const*, int, int, size_t);
-int *update_board(int const*, size_t);
+int *update_board(int*, size_t);
+SDL_Texture *load_texture(char*);
 
 bool init();
 bool load();
-SDL_Texture *load_texture(char const*);
 bool loop();
 void kill();
 
 // Pointers to window and surface
+// may or may not refactor globals
 SDL_Surface *g_surface = NULL;
-SDL_Surface *mandelbrot = NULL;
 SDL_Window *g_window = NULL;
 SDL_Renderer *g_renderer = NULL;
 SDL_Texture *g_texture = NULL;
 
 int main(int argc, char **argv) {
-    size_t const size = 10;
+    size_t const size = 20;
     int *board = get_board(size);
 
-    if (board) {
-        fill_board(board, size, 1);
-        //     print_board(board, size);
-    }
+    if (board == NULL) return 1;
+
+    fill_board(board, size, Glider);
 
     // SDL Init
     if (!init()) return 1;
     if (!load()) return 1;
 
-    // SDL_Rect viewport = {0, 0, 640/2, 480/2};
-    // SDL_RenderSetViewport(g_renderer, &viewport);
-
-    // SDL_RenderCopy(g_renderer, mandelbrot, NULL, NULL);
-
-    // blits image when loaded as IMG
-    // SDL_BlitSurface(mandelbrot, NULL, g_surface, NULL);
-
     // drawing grid
     int const delta = SCREEN_HEIGHT/size * 0.95;
-    SDL_Rect grid;
-    grid.w = delta;
-    grid.h = delta;
-    int const dist = delta*size/2;
-
-    int const yl = SCREEN_HEIGHT/2 - dist;
-    int const yu = SCREEN_HEIGHT/2 + dist;
-    int const xl = SCREEN_WIDTH/2 - dist;
-    int const xu = SCREEN_WIDTH/2 + dist;
+    SDL_Rect const grid = get_grid(size, delta);
 
     while(loop()) {
-        SDL_SetRenderDrawColor(g_renderer, 0x11, 0x11, 0x11, 0xff);
+        // Clean screen
+        SDL_SetRenderDrawColor(g_renderer, 0x02, 0x02, 0x02, 0xff);
         SDL_RenderClear(g_renderer);
 
-        // Draw blue horizontal line
-        // SDL_SetRenderDrawColor(g_renderer, 0x00, 0x00, 0xcc, 0xff);
-        // SDL_RenderDrawLine(g_renderer, 0, SCREEN_HEIGHT/2, SCREEN_WIDTH, SCREEN_HEIGHT/2);
-
-        // Renders the mandelbrot
-        // SDL_RenderCopy(g_renderer, g_texture, NULL, NULL);
-
-        int z1 = 0;
-        for (int dy=xl; dy<xu; dy+=delta) {
-            int z2 = 0;
-            grid.x = dy;
-
-            for (int dx=yl; dx<yu; dx+=delta) {
-                grid.y = dx;
-                if (board[z1*size + z2]) {
-                    // #2d8a91
-                    SDL_SetRenderDrawColor(g_renderer, 0x2d, 0x8a, 0x91, 0xff);
-                    SDL_RenderFillRect(g_renderer, &grid);
-                }
-                z2++;
-                // gray
-                SDL_SetRenderDrawColor(g_renderer, 0xdc, 0xdc, 0xdc, 0xff);
-                SDL_RenderDrawRect(g_renderer, &grid);
-            }
-            z1++;
-        }
+        draw_board(board, grid, delta, size);
         SDL_RenderPresent(g_renderer);
+
+        SDL_Delay(100);
+
         board = update_board(board, size);
-        SDL_Delay(80);
+        if (board == NULL) return 1;
     }
 
     free(board);
@@ -108,30 +70,63 @@ int main(int argc, char **argv) {
 }
 
 int *get_board(size_t const size) {
-    return calloc(size*size, sizeof(int));
+    int *board = calloc(size*size, sizeof(int));
+    return board ? board : NULL;
 }
 
-void print_board(int const *board, size_t const size) {
-    for (int i = 0; i < size; i++) {
-        for (int j = 0; j < size; j++) {
-            printf("%d ", board[i*size + j]);
+void draw_board(int const *board, SDL_Rect const grid, int const delta, size_t const size) {
+    SDL_Rect node;
+    node.w = delta;
+    node.h = delta;
+
+    for (int x=0, y, dx=grid.x; dx<grid.w; x++, dx+=delta) {
+        y=0;
+        node.x = dx;
+
+        for (int dy=grid.y; dy<grid.h; y++, dy+=delta) {
+            node.y = dy;
+            if (board[x*size + y]) {
+                // #e4e8d5
+                SDL_SetRenderDrawColor(g_renderer, 0xe4, 0xe8, 0xd5, 0xff);
+                SDL_RenderFillRect(g_renderer, &node);
+            }
+            // draw using square outlines (double width lines)
+            // SDL_SetRenderDrawColor(g_renderer, 0x40, 0x83, 0x74, 0xff);
+            // SDL_RenderDrawRect(g_renderer, &node);
+
+            // #408374
+            SDL_SetRenderDrawColor(g_renderer, 0x40, 0x83, 0x74, 0xff);
+            SDL_RenderDrawLine(g_renderer, dx, dy, dx, dy+delta);
+            SDL_RenderDrawLine(g_renderer, dx, dy, dx+delta, dy);
         }
-        printf("\n");
     }
+
+    SDL_RenderDrawLine(g_renderer, grid.x, grid.h, grid.w, grid.h);
+    SDL_RenderDrawLine(g_renderer, grid.w, grid.y, grid.w, grid.h);
+}
+
+SDL_Rect get_grid(size_t const size, int const delta) {
+    SDL_Rect grid;
+    int const dist = delta*size/2;
+
+    grid.x = SCREEN_WIDTH/2 - dist;
+    grid.y = SCREEN_HEIGHT/2 - dist;
+    grid.h = SCREEN_HEIGHT/2 + dist;
+    grid.w = SCREEN_WIDTH/2 + dist;
+
+    return grid;
 }
 
 void fill_board(int *board, size_t const size, Shape const s) {
     int count = 0;
     switch (s) {
-        // Generates a blinker
-        case 0:
+        case Blinker:
             for (int i=size/2-1; i <= size/2+1; i++) {
                 board[i*size + size/2] = true;
                 count++;
             }
             break;
-        // Generates a glider
-        case 1:
+        case Glider:
             for (int i=size/2-1; i <= size/2+1; i++) {
                 for (int j=size/2-1; j <= size/2+1; j++) {
                     if (j == size/2+1) board[i*size + j] = true;
@@ -140,7 +135,7 @@ void fill_board(int *board, size_t const size, Shape const s) {
                 }
             }
             break;
-        case 2:
+        case Pentomino:
             for (int i = size/2-1; i <= size/2+1; i++) {
                 for (int j=size/2-1; j <= size/2+1; j++) {
                     if (i == size/2)                    board[i*size + j] = true;
@@ -149,7 +144,7 @@ void fill_board(int *board, size_t const size, Shape const s) {
                 }
             }
         default:
-            // TODO: Could fill board with a random state
+            // TODO: Could fill board with a random state, also add more cases
             break;
     }
 }
@@ -177,8 +172,9 @@ int adj_states(int const *board, int const x, int const y, size_t const size) {
 }
 
 // Next board state
-int *update_board(int const *board, size_t const size) {
+int *update_board(int *board, size_t const size) {
     int *next_board = get_board(size);
+    if (next_board == NULL) return NULL;
 
     for (int i=0; i < size; i++) {
         for (int j=0; j < size; j++) {
@@ -192,6 +188,7 @@ int *update_board(int const *board, size_t const size) {
         }
     }
 
+    free(board);
     return next_board;
 }
 
@@ -224,6 +221,7 @@ bool init() {
 bool load() {
     g_renderer = SDL_CreateSoftwareRenderer(g_surface);
     if (g_renderer == NULL) {
+        kill();
         printf("Renderer could not be created! SDL error: %s", SDL_GetError());
         return false;
     }
@@ -235,17 +233,10 @@ bool load() {
         return false;
     }
 
-    // Load as IMG
-    // mandelbrot = IMG_Load("mandelbrot.jpg");
-    // if (mandelbrot == NULL) {
-    //     printf("Unable to load image %s, SDL error: %s\n", "mandelbrot.jpg", SDL_GetError());
-    //     return false;
-    // }
-
     return true;
 }
 
-SDL_Texture *load_texture(char const *path) {
+SDL_Texture *load_texture(char *path) {
     SDL_Texture *new_texture = NULL;
     SDL_Surface *loaded_surface = IMG_Load(path);
 
@@ -263,7 +254,6 @@ SDL_Texture *load_texture(char const *path) {
     return new_texture;
 }
 
-// TODO Need to check working keystrokes
 bool loop() {
     static bool square;
     SDL_Event e;
@@ -274,10 +264,10 @@ bool loop() {
                 return false;
             case SDL_KEYUP:
                 square = true;
-            break;
+                break;
             case SDL_KEYDOWN:
                 square = false;
-            break;
+                break;
             case SDL_MOUSEMOTION:
                 break;
             default:
@@ -296,8 +286,6 @@ bool loop() {
 
 // Free loaded assets and quit SDL
 void kill() {
-    SDL_FreeSurface(mandelbrot);
-    mandelbrot = NULL;
     SDL_FreeSurface(g_surface);
     g_surface = NULL;
 
