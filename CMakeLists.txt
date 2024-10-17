@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD 14)
 
 add_executable(monte_carlo monte_carlo.c)
 add_executable(conway conway.c)
+add_executable(vectors vec2d.c)
 
 # Must set the path to the main.cpp, for example: scripts/main.cpp if it is inside a folder
 # add_executable(${PROJECT_NAME} scripts/main.cpp)
